@@ -11,10 +11,11 @@ macro_rules! extract {
     ($val:expr, $name:path) => {
         match $val {
             $name(inner) => inner,
-            _ => panic!("Extract failed for {:?}", $val),
+            ref rest => panic!("Extract failed for {}, found {:?}", stringify!($name), rest),
         }
     };
 }
+
 fn disassemble_inststruction(module: &SpirvModule, inst: &Instruction) -> String {
     format!(
         "{rid}{opcode}{rtype}{space}{operands}",
