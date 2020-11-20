@@ -43,7 +43,8 @@ fn disassemble_inststruction(module: &SpirvModule, inst: &Instruction) -> String
                 .map(|operand| match *operand {
                     Operand::IdRef(id) => escape_html(&module.name_or_id(Some(id)).unwrap()),
                     _ => operand.disassemble(),
-                }).collect::<Vec<String>>()
+                })
+                .collect::<Vec<String>>()
                 .join(" ")
         }
     )
@@ -100,7 +101,8 @@ impl SpirvModule {
                         Some((id, name.clone()))
                     }
                     _ => None,
-                }).collect();
+                })
+                .collect();
             SpirvModule { names, module }
         }
         inner(p.as_ref())
@@ -115,10 +117,24 @@ pub struct PetSpirv<'spir> {
 
 pub fn export_spirv_cfg(module: &SpirvModule) {
     let mut file = File::create("test.dot").expect("file");
+    writeln!(file, "digraph {{");
     for f in &module.module.functions {
+        let mut has_control_flow = false;
+        for block in f.basic_blocks.iter() {
+            let last_opcode = block.instructions.last().unwrap().class.opcode;
+            if last_opcode == spirv::Op::BranchConditional || last_opcode == spirv::Op::Switch {
+                has_control_flow = true;
+            }
+        }
+
+        if !has_control_flow {
+            continue;
+        }
+
         let s = PetSpirv::new(module, f);
         s.add_fn_to_dot(&mut file);
     }
+    writeln!(file, "}}");
 }
 pub enum Terminator {
     Branch {
@@ -213,7 +229,8 @@ impl Terminator {
                 ..
             } => vec![*true_block, *false_block],
             _ => Vec::new(),
-        }.into_iter()
+        }
+        .into_iter()
     }
 }
 impl<'spir> PetSpirv<'spir> {
@@ -229,8 +246,8 @@ impl<'spir> PetSpirv<'spir> {
             .filter(|c| match c {
                 '$' | '.' => false,
                 _ => true,
-            }).collect();
-        writeln!(write, "digraph {{");
+            })
+            .collect();
         //writeln!(write, "digraph {} {{", dot_friendly_name);
         writeln!(write, "graph [fontname=\"monospace\"];");
         writeln!(write, "node [fontname=\"monospace\"];");
@@ -282,7 +299,6 @@ impl<'spir> PetSpirv<'spir> {
                 writeln!(write, "  {node} -> {target}", node = node, target = bb);
             }
         });
-        writeln!(write, "}}");
     }
 
     pub fn get_label(&self, id: u32) -> String {
@@ -326,7 +342,8 @@ impl<'spir> PetSpirv<'spir> {
             .filter_map(|bb| {
                 let label = bb.label.as_ref()?;
                 label.result_id.map(|id| (id, bb))
-            }).collect();
+            })
+            .collect();
         PetSpirv {
             module,
             function,
