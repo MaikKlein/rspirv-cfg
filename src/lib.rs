@@ -1,7 +1,7 @@
 extern crate rspirv;
 extern crate spirv_headers as spirv;
 use rspirv::binary::Disassemble;
-use rspirv::mr::{BasicBlock, Function, Instruction, Module, Operand};
+use rspirv::dr::{Block, Function, Instruction, Module, Operand};
 use std::collections::{BTreeMap, HashSet};
 use std::fs::{read, File};
 use std::io::Write;
@@ -24,7 +24,7 @@ fn disassemble_inststruction(module: &SpirvModule, inst: &Instruction) -> String
                 &module
                     .name_or_id(inst.result_id)
                     .map(|name| format!("{} = ", name))
-                    .unwrap_or_else(|| String::new()),
+                    .unwrap_or_else(String::new),
             )
         },
         opcode = format!("Op{}", inst.class.opname),
@@ -33,7 +33,7 @@ fn disassemble_inststruction(module: &SpirvModule, inst: &Instruction) -> String
             &module
                 .name_or_id(inst.result_type)
                 .map(|name| format!(" {}", name))
-                .unwrap_or_else(|| String::new())
+                .unwrap_or_else(String::new)
         ),
         //rtype = "",
         space = if !inst.operands.is_empty() { " " } else { "" },
@@ -43,7 +43,8 @@ fn disassemble_inststruction(module: &SpirvModule, inst: &Instruction) -> String
                 .map(|operand| match *operand {
                     Operand::IdRef(id) => escape_html(&module.name_or_id(Some(id)).unwrap()),
                     _ => operand.disassemble(),
-                }).collect::<Vec<String>>()
+                })
+                .collect::<Vec<String>>()
                 .join(" ")
         }
     )
@@ -72,7 +73,7 @@ impl SpirvModule {
         let id = f.def.as_ref()?.result_id?;
         self.names.get(&id).map(String::as_str)
     }
-    pub fn get_name_bb<'module>(&'module self, bb: &BasicBlock) -> Option<&'module str> {
+    pub fn get_name_bb<'module>(&'module self, bb: &Block) -> Option<&'module str> {
         let label = bb.label.as_ref()?;
         let return_id = label.result_id?;
         self.names.get(&return_id).map(String::as_str)
@@ -80,7 +81,7 @@ impl SpirvModule {
     pub fn load<P: AsRef<Path>>(p: &P) -> Self {
         fn inner(p: &Path) -> SpirvModule {
             use rspirv::binary::Parser;
-            use rspirv::mr::Loader;
+            use rspirv::dr::Loader;
             let module = {
                 let spv_file = read(p).expect("file");
                 let mut loader = Loader::new();
@@ -100,7 +101,8 @@ impl SpirvModule {
                         Some((id, name.clone()))
                     }
                     _ => None,
-                }).collect();
+                })
+                .collect();
             SpirvModule { names, module }
         }
         inner(p.as_ref())
@@ -110,7 +112,7 @@ impl SpirvModule {
 pub struct PetSpirv<'spir> {
     pub module: &'spir SpirvModule,
     pub function: &'spir Function,
-    pub block_map: BTreeMap<u32, &'spir BasicBlock>,
+    pub block_map: BTreeMap<u32, &'spir Block>,
 }
 
 pub fn export_spirv_cfg(module: &SpirvModule) {
@@ -146,7 +148,7 @@ impl Terminator {
             _ => None,
         }
     }
-    pub fn from_basic_block(bb: &BasicBlock) -> Terminator {
+    pub fn from_basic_block(bb: &Block) -> Terminator {
         let get_merge_block = || -> Option<spirv::Word> {
             let before_last = bb.instructions.get(bb.instructions.len() - 2)?;
             match before_last.class.opcode {
@@ -165,7 +167,7 @@ impl Terminator {
             spirv::Op::Switch => {
                 let default = extract!(inst.operands[1], Operand::IdRef);
                 let merge_block = get_merge_block();
-                let mut values: Vec<u32> = inst
+                let values: Vec<u32> = inst
                     .operands
                     .iter()
                     .skip(2)
@@ -213,30 +215,24 @@ impl Terminator {
                 ..
             } => vec![*true_block, *false_block],
             _ => Vec::new(),
-        }.into_iter()
+        }
+        .into_iter()
     }
 }
 impl<'spir> PetSpirv<'spir> {
-    pub fn get_block(&self, id: u32) -> &'spir BasicBlock {
+    pub fn get_block(&self, id: u32) -> &'spir Block {
         self.block_map
             .get(&id)
-            .expect(&format!("BasicBlock {}", id))
+            .unwrap_or_else(|| panic!("Block {}", id))
     }
     pub fn add_fn_to_dot(&self, write: &mut impl Write) {
         let fn_name = self.module.get_name_fn(&self.function).unwrap_or("Unknown");
-        let dot_friendly_name: String = fn_name
-            .chars()
-            .filter(|c| match c {
-                '$' | '.' => false,
-                _ => true,
-            }).collect();
-        writeln!(write, "digraph {{");
-        //writeln!(write, "digraph {} {{", dot_friendly_name);
-        writeln!(write, "graph [fontname=\"monospace\"];");
-        writeln!(write, "node [fontname=\"monospace\"];");
-        writeln!(write, "edge [fontname=\"monospace\"];");
+        writeln!(write, "digraph {{").unwrap();
+        writeln!(write, "graph [fontname=\"monospace\"];").unwrap();
+        writeln!(write, "node [fontname=\"monospace\"];").unwrap();
+        writeln!(write, "edge [fontname=\"monospace\"];").unwrap();
         let fn_id = self.function.def.as_ref().unwrap().result_id.unwrap();
-        let entry = self.function.basic_blocks[0]
+        let entry = self.function.blocks[0]
             .label
             .as_ref()
             .expect("label")
@@ -247,42 +243,42 @@ impl<'spir> PetSpirv<'spir> {
             "{id} [shape=\"box\", label={name:?}];",
             id = fn_id,
             name = fn_name
-        );
-        writeln!(write, "{} -> {}", fn_id, entry);
+        )
+        .unwrap();
+        writeln!(write, "{} -> {}", fn_id, entry).unwrap();
 
         for (id, block) in &self.block_map {
-            let default = format!("{}", id);
             let name = self.module.name_or_id(Some(*id)).expect("name");
-            writeln!(write, "  {id} [shape=none, label=<", id = id,);
-            writeln!(write, "\t<table>");
+            writeln!(write, "  {id} [shape=none, label=<", id = id,).unwrap();
+            writeln!(write, "\t<table>").unwrap();
             writeln!(
                 write,
                 "\t\t<tr><td align=\"center\" bgcolor=\"gray\" colspan=\"1\">{name}</td></tr>",
                 name = name
-            );
-            writeln!(write, "\t\t<tr><td align=\"left\" balign=\"left\">");
+            )
+            .unwrap();
+            writeln!(write, "\t\t<tr><td align=\"left\" balign=\"left\">").unwrap();
             for inst in &block.instructions {
                 writeln!(
                     write,
                     "\t\t\t{}<br/>",
                     disassemble_inststruction(&self.module, inst)
-                );
+                )
+                .unwrap();
             }
-            writeln!(write, "\t</td></tr></table>>];");
+            writeln!(write, "\t</td></tr></table>>];").unwrap();
         }
 
-        self.traverse(|node, termiantor| {
-            let node_label = self.get_label(node);
+        self.traverse(|node, _| {
             let terminator = Terminator::from_basic_block(self.get_block(node));
             if let Some(merge_block) = terminator.merge_block() {
-                writeln!(write, "\t{} -> {}[style=\"dashed\"]", node, merge_block);
+                writeln!(write, "\t{} -> {}[style=\"dashed\"]", node, merge_block).unwrap();
             }
             for bb in terminator.successors() {
-                let bb_label = self.get_label(bb);
-                writeln!(write, "  {node} -> {target}", node = node, target = bb);
+                writeln!(write, "  {node} -> {target}", node = node, target = bb).unwrap();
             }
         });
-        writeln!(write, "}}");
+        writeln!(write, "}}").unwrap();
     }
 
     pub fn get_label(&self, id: u32) -> String {
@@ -295,7 +291,7 @@ impl<'spir> PetSpirv<'spir> {
 
     pub fn traverse(&self, mut f: impl FnMut(u32, &Terminator)) {
         let mut map = HashSet::new();
-        if let Some(start_block) = self.function.basic_blocks.first() {
+        if let Some(start_block) = self.function.blocks.first() {
             let label = start_block.label.as_ref().unwrap();
             let id = label.result_id.unwrap();
             self.traverse_from(&mut map, id, &mut f);
@@ -321,12 +317,13 @@ impl<'spir> PetSpirv<'spir> {
 
     pub fn new(module: &'spir SpirvModule, function: &'spir Function) -> Self {
         let block_map = function
-            .basic_blocks
+            .blocks
             .iter()
             .filter_map(|bb| {
                 let label = bb.label.as_ref()?;
                 label.result_id.map(|id| (id, bb))
-            }).collect();
+            })
+            .collect();
         PetSpirv {
             module,
             function,
