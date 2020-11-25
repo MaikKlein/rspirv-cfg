@@ -228,9 +228,12 @@ impl<'spir> PetSpirv<'spir> {
     pub fn add_fn_to_dot(&self, write: &mut impl Write) {
         let fn_name = self.module.get_name_fn(&self.function).unwrap_or("Unknown");
         writeln!(write, "digraph {{").unwrap();
-        writeln!(write, "graph [fontname=\"monospace\"];").unwrap();
-        writeln!(write, "node [fontname=\"monospace\"];").unwrap();
-        writeln!(write, "edge [fontname=\"monospace\"];").unwrap();
+        // HACK(eddyb) the `13.5` font size works around a graphviz bug where the
+        // default size of `14` would compute metrics as `13.5` but render as `14`,
+        // resulting in overflowing text for SVG, and generally differ from PNG.
+        writeln!(write, "graph [fontname=\"monospace\", fontsize=13.5];").unwrap();
+        writeln!(write, "node [fontname=\"monospace\", fontsize=13.5];").unwrap();
+        writeln!(write, "edge [fontname=\"monospace\", fontsize=13.5];").unwrap();
         let fn_id = self.function.def.as_ref().unwrap().result_id.unwrap();
         let entry = self.function.blocks[0]
             .label
