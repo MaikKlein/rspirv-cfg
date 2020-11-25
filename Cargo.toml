@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["maik"]
 
 [dependencies]
-rspirv = "0.5"
-spirv_headers = "1.2"
-clap = "2.32"
+rspirv = "0.7.0"
+spirv_headers = "1.5.0"
+clap = "2.33.3"
 
